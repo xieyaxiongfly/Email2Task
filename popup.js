@@ -274,7 +274,91 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 使用Gemini生成任务
     async function generateTaskWithGemini(emailContent) {
-        const prompt = `${taskPromptInput.value}\n\n${emailContent}\n\nPlease reply in JSON format with the following fields:\n{\n  "title": "Task title",\n  "description": "Detailed description",\n  "dueDate": "Due date in YYYY-MM-DD format (if any)",\n  "priority": "High/Medium/Low"\n}`;
+        // 先获取数据库结构来动态生成提示词
+        let dynamicFields = {
+            "title": "Task title (required)"
+        };
+        
+        try {
+            const dbResponse = await fetch(`https://api.notion.com/v1/databases/${notionDatabaseIdInput.value}`, {
+                headers: {
+                    'Authorization': `Bearer ${notionTokenInput.value}`,
+                    'Notion-Version': '2022-06-28'
+                }
+            });
+            
+            if (dbResponse.ok) {
+                const dbData = await dbResponse.json();
+                const availableProperties = Object.keys(dbData.properties);
+                
+                availableProperties.forEach(propName => {
+                    const propConfig = dbData.properties[propName];
+                    
+                    // 获取属性描述（如果存在）
+                    const description = propConfig.description || '';
+                    const fieldKey = propName.toLowerCase().replace(/\s+/g, '_');
+                    
+                    // 根据属性类型自动添加到生成字段，并包含描述信息
+                    if (propConfig.type === 'rich_text' && propName.toLowerCase() !== 'name') {
+                        const hint = description ? `${description}` : `Content for ${propName} field`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'date') {
+                        const hint = description ? `${description} (format: YYYY-MM-DD)` : `Date in YYYY-MM-DD format for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'select') {
+                        const options = propConfig.select.options.map(opt => opt.name);
+                        const hint = description ? `${description} (options: ${options.join(', ')})` : `Select one from: ${options.join(', ')}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'multi_select') {
+                        const options = propConfig.multi_select?.options?.map(opt => opt.name) || [];
+                        const hint = description ? `${description} (options: ${options.join(', ')})` : `Array of values from: ${options.join(', ')}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'number') {
+                        const hint = description ? `${description} (numeric value)` : `Numeric value for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'checkbox') {
+                        const hint = description ? `${description} (true/false)` : `Boolean value (true/false) for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'url') {
+                        const hint = description ? `${description} (URL format)` : `URL for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'email') {
+                        const hint = description ? `${description} (email format)` : `Email address for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'phone_number') {
+                        const hint = description ? `${description} (phone format)` : `Phone number for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    else if (propConfig.type === 'people') {
+                        const hint = description ? `${description} (person name)` : `Person name for ${propName}`;
+                        dynamicFields[fieldKey] = hint;
+                    }
+                    
+                    // 在控制台输出属性详情，方便调试
+                    console.log(`Property: ${propName}, Type: ${propConfig.type}, Description: "${description}"`);
+                });
+            }
+        } catch (error) {
+            console.warn('Could not fetch database schema, using default fields:', error);
+            // 使用默认字段
+            dynamicFields = {
+                "title": "Task title (required)",
+                "description": "Detailed description", 
+                "dueDate": "Due date in YYYY-MM-DD format (if any)",
+                "priority": "High/Medium/Low"
+            };
+        }
+        
+        const fieldsExample = JSON.stringify(dynamicFields, null, 2);
+        const prompt = `${taskPromptInput.value}\n\n${emailContent}\n\nPlease reply in JSON format with the following fields:\n${fieldsExample}\n\nImportant: Only include fields that are relevant to the email content. If a field is not applicable, omit it from the response.`;
 
         try {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModelSelect.value}:generateContent?key=` + geminiApiKeyInput.value, {
@@ -377,99 +461,156 @@ document.addEventListener('DOMContentLoaded', function() {
                 const availableProperties = Object.keys(dbData.properties);
                 console.log('Available properties:', availableProperties);
 
-                // 动态添加可用的属性
+                // 动态映射所有属性
                 availableProperties.forEach(propName => {
                     const propConfig = dbData.properties[propName];
+                    const normalizedPropName = propName.toLowerCase().replace(/\s+/g, '_');
                     
-                    // 添加描述字段（支持多种可能的名称）
-                    if (['Description', 'description', '描述', 'Content', 'content', '内容', 'Details', 'details'].includes(propName) && 
-                        propConfig.type === 'rich_text' && taskData.description) {
-                        pageData.properties[propName] = {
-                            rich_text: [{
-                                text: {
-                                    content: taskData.description
-                                }
-                            }]
-                        };
+                    // 跳过Name字段（已处理）
+                    if (propName === 'Name' || propConfig.type === 'title') {
+                        return;
                     }
                     
-                    // 添加截止日期字段（支持多种可能的名称）
-                    else if (['Due Date', 'due_date', 'DueDate', '截止日期', 'Deadline', 'deadline', 'Date', 'date'].includes(propName) && 
-                             propConfig.type === 'date' && taskData.dueDate) {
-                        pageData.properties[propName] = {
-                            date: {
-                                start: taskData.dueDate
-                            }
-                        };
+                    // 检查taskData中是否有对应的字段
+                    let fieldValue = null;
+                    
+                    // 直接匹配标准化的属性名
+                    if (taskData[normalizedPropName] !== undefined) {
+                        fieldValue = taskData[normalizedPropName];
+                    }
+                    // 匹配原始属性名（小写）
+                    else if (taskData[propName.toLowerCase()] !== undefined) {
+                        fieldValue = taskData[propName.toLowerCase()];
+                    }
+                    // 匹配原始属性名
+                    else if (taskData[propName] !== undefined) {
+                        fieldValue = taskData[propName];
                     }
                     
-                    // 添加优先级字段（支持多种可能的名称）
-                    else if (['Priority', 'priority', '优先级', 'Level', 'level', 'Importance', 'importance'].includes(propName) && 
-                             propConfig.type === 'select' && taskData.priority) {
-                        
-                        // 检查选项是否存在
-                        const availableOptions = propConfig.select.options.map(opt => opt.name);
-                        console.log(`Available options for ${propName}:`, availableOptions);
-                        
-                        // 尝试匹配优先级选项
-                        let priorityOption = taskData.priority;
-                        if (!availableOptions.includes(priorityOption)) {
-                            // 尝试中英文映射
-                            const priorityMap = {
-                                'High': ['高', 'High', 'HIGH', '高优先级', 'P1', '紧急'],
-                                'Medium': ['中', 'Medium', 'MEDIUM', '中优先级', 'P2', '一般'],
-                                'Low': ['低', 'Low', 'LOW', '低优先级', 'P3', '不紧急']
-                            };
-                            
-                            for (const [englishPriority, alternatives] of Object.entries(priorityMap)) {
-                                if (alternatives.some(alt => availableOptions.includes(alt))) {
-                                    priorityOption = alternatives.find(alt => availableOptions.includes(alt));
-                                    break;
+                    // 如果找到了对应的值，则根据类型进行格式化
+                    if (fieldValue !== null && fieldValue !== undefined && fieldValue !== '') {
+                        switch (propConfig.type) {
+                            case 'rich_text':
+                                pageData.properties[propName] = {
+                                    rich_text: [{
+                                        text: {
+                                            content: String(fieldValue)
+                                        }
+                                    }]
+                                };
+                                break;
+                                
+                            case 'date':
+                                // 验证日期格式
+                                const dateValue = String(fieldValue);
+                                if (dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                    pageData.properties[propName] = {
+                                        date: {
+                                            start: dateValue
+                                        }
+                                    };
                                 }
-                            }
-                        }
-                        
-                        if (availableOptions.includes(priorityOption)) {
-                            pageData.properties[propName] = {
-                                select: {
-                                    name: priorityOption
+                                break;
+                                
+                            case 'select':
+                                const availableOptions = propConfig.select.options.map(opt => opt.name);
+                                const selectValue = String(fieldValue);
+                                
+                                // 直接匹配或模糊匹配
+                                let matchedOption = availableOptions.find(opt => 
+                                    opt.toLowerCase() === selectValue.toLowerCase()
+                                );
+                                
+                                if (!matchedOption) {
+                                    matchedOption = availableOptions.find(opt => 
+                                        opt.toLowerCase().includes(selectValue.toLowerCase()) ||
+                                        selectValue.toLowerCase().includes(opt.toLowerCase())
+                                    );
                                 }
-                            };
-                        }
-                    }
-                    
-                    // 添加标签字段（如果存在）
-                    else if (['Tags', 'tags', '标签', 'Category', 'category', '分类'].includes(propName) && 
-                             propConfig.type === 'multi_select') {
-                        pageData.properties[propName] = {
-                            multi_select: [{
-                                name: currentLanguage === 'zh' ? "邮件任务" : "Email Task"
-                            }]
-                        };
-                    }
-                    
-                    // 添加状态字段（如果存在）
-                    else if (['Status', 'status', '状态', 'State', 'state'].includes(propName) && 
-                             propConfig.type === 'select') {
-                        const statusOptions = propConfig.select.options.map(opt => opt.name);
-                        
-                        // 尝试找到表示"待办"或"新建"的选项
-                        const todoOptions = ['Todo', 'TODO', 'To Do', '待办', '未开始', 'Not Started', 'New', '新建', 'Pending'];
-                        const matchedStatus = todoOptions.find(opt => statusOptions.includes(opt));
-                        
-                        if (matchedStatus) {
-                            pageData.properties[propName] = {
-                                select: {
-                                    name: matchedStatus
+                                
+                                if (matchedOption) {
+                                    pageData.properties[propName] = {
+                                        select: {
+                                            name: matchedOption
+                                        }
+                                    };
+                                } else {
+                                    console.warn(`Could not match "${selectValue}" to any option in ${propName}:`, availableOptions);
                                 }
-                            };
-                        } else if (statusOptions.length > 0) {
-                            // 如果没有匹配的，使用第一个选项
-                            pageData.properties[propName] = {
-                                select: {
-                                    name: statusOptions[0]
+                                break;
+                                
+                            case 'multi_select':
+                                const multiSelectOptions = propConfig.multi_select?.options?.map(opt => opt.name) || [];
+                                let values = [];
+                                
+                                if (Array.isArray(fieldValue)) {
+                                    values = fieldValue.map(v => String(v));
+                                } else {
+                                    values = String(fieldValue).split(',').map(v => v.trim());
                                 }
-                            };
+                                
+                                const matchedValues = values.map(value => {
+                                    return multiSelectOptions.find(opt => 
+                                        opt.toLowerCase() === value.toLowerCase() ||
+                                        opt.toLowerCase().includes(value.toLowerCase()) ||
+                                        value.toLowerCase().includes(opt.toLowerCase())
+                                    );
+                                }).filter(Boolean);
+                                
+                                if (matchedValues.length > 0) {
+                                    pageData.properties[propName] = {
+                                        multi_select: matchedValues.map(name => ({ name }))
+                                    };
+                                }
+                                break;
+                                
+                            case 'number':
+                                const numValue = parseFloat(fieldValue);
+                                if (!isNaN(numValue)) {
+                                    pageData.properties[propName] = {
+                                        number: numValue
+                                    };
+                                }
+                                break;
+                                
+                            case 'checkbox':
+                                const boolValue = String(fieldValue).toLowerCase();
+                                pageData.properties[propName] = {
+                                    checkbox: boolValue === 'true' || boolValue === '1' || boolValue === 'yes'
+                                };
+                                break;
+                                
+                            case 'url':
+                                const urlValue = String(fieldValue);
+                                if (urlValue.startsWith('http://') || urlValue.startsWith('https://') || urlValue.includes('.')) {
+                                    pageData.properties[propName] = {
+                                        url: urlValue
+                                    };
+                                }
+                                break;
+                                
+                            case 'email':
+                                const emailValue = String(fieldValue);
+                                if (emailValue.includes('@')) {
+                                    pageData.properties[propName] = {
+                                        email: emailValue
+                                    };
+                                }
+                                break;
+                                
+                            case 'phone_number':
+                                pageData.properties[propName] = {
+                                    phone_number: String(fieldValue)
+                                };
+                                break;
+                                
+                            case 'people':
+                                // People类型需要用户ID，这里先简单处理为空
+                                console.warn(`People property ${propName} requires user IDs, skipping`);
+                                break;
+                                
+                            default:
+                                console.warn(`Unsupported property type: ${propConfig.type} for ${propName}`);
                         }
                     }
                 });
