@@ -1,9 +1,9 @@
-// 安装时的初始化
+// Initialize on installation / 安装时的初始化
 chrome.runtime.onInstalled.addListener(() => {
     console.log('Outlook to Notion Task Generator installed');
 });
 
-// 监听来自content script的消息
+// Listen for messages from content script / 监听来自content script的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'openPopup') {
         // 打开弹窗（这个功能需要用户点击插件图标）
