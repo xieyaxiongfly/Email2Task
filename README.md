@@ -224,4 +224,77 @@ A: Please confirm:
 | 状态 | `Status`, `状态`, `State` | 选择 | 可选 |
 | 标签 | `Tags`, `标签`, `Category`, `分类` | 多选 | 可选 |
 
-**重要**：你
+**重要**：你的数据库只需要一个 `Name` 属性就能正常工作，其他所有属性都是可选的！
+
+### 📁 项目结构
+
+```
+email2task/
+├── manifest.json          # Chrome扩展配置文件
+├── background.js          # 后台脚本，处理扩展生命周期
+├── content.js            # 内容脚本，提取Outlook邮件内容
+├── popup.html            # 弹窗界面HTML
+├── popup.js              # 弹窗逻辑处理
+├── styles.css            # 样式文件
+├── README.md             # 项目说明文档
+├── install_guide.md      # 安装指南
+└── icons/               # 图标文件夹
+    ├── icon16.png
+    ├── icon48.png
+    └── icon128.png
+```
+
+### ⚠️ 常见问题排查
+
+**Q: 插件显示"无法获取邮件内容"**
+A: 请确保：
+- 你在Outlook邮件详情页面（不是邮件列表页面）
+- 邮件已完全加载
+- 尝试刷新页面
+
+**Q: Gemini API调用失败**
+A: 请检查：
+- API密钥是否正确
+- API配额是否充足
+- 网络连接是否稳定
+- 可能需要使用VPN
+
+**Q: 无法添加到Notion**
+A: 请确认：
+- Notion Integration Token有效
+- 数据库ID正确
+- 数据库已连接到你的Integration
+- 数据库属性名匹配
+
+**Q: "Could not establish connection. Receiving end does not exist"错误**
+A: 这通常是内容脚本加载问题：
+- 刷新Outlook页面
+- 重新加载扩展程序
+- 检查是否在支持的Outlook域名上
+
+### 🔒 隐私和安全
+
+- 所有API密钥仅存储在浏览器本地，不会上传到任何服务器
+- 邮件内容仅在处理时临时发送给Gemini API进行分析
+- 生成的任务数据直接发送到你的Notion数据库
+- 插件不会收集或存储任何个人信息
+
+### 🚀 支持的Gemini模型
+
+- **Gemini 1.5 Flash** (推荐) - 速度最快，适合日常使用
+- **Gemini 1.5 Pro** - 功能最强大，适合复杂邮件分析
+- **Gemini 1.0 Pro** - 经典版本，最稳定
+
+### 📊 支持的Outlook版本
+
+- Outlook Web App (outlook.live.com)
+- Outlook for Business (outlook.office.com)
+- 同时支持新版和经典界面
+
+### 🤝 贡献
+
+欢迎提交问题和改进建议！如果你遇到任何问题或有功能建议，请在项目中创建Issue。
+
+### 📄 许可证
+
+此项目仅供学习和个人使用。使用前请确保遵守Google Gemini API和Notion API的使用条款。
