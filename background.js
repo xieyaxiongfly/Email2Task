@@ -49,19 +49,31 @@ function highlightEmailArea() {
     }
 }
 
-// 监听标签页更新，在Outlook页面注入内容脚本
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+// 监听标签页更新，在Outlook页面确保content script被注入
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab.url && 
         (tab.url.includes('outlook.live.com') || tab.url.includes('outlook.office.com'))) {
         
-        // 确保内容脚本已注入
-        chrome.scripting.executeScript({
-            target: { tabId: tabId },
-            files: ['content.js']
-        }).catch((error) => {
-            // 忽略已经注入的错误
-            console.log('Content script may already be injected');
-        });
+        try {
+            // 检查content script是否已经注入
+            const result = await chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                function: () => {
+                    return typeof window.outlookToNotionContentScriptLoaded !== 'undefined';
+                }
+            });
+            
+            // 如果content script未加载，则注入
+            if (!result[0].result) {
+                await chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    files: ['content.js']
+                });
+                console.log('Content script injected into tab:', tabId);
+            }
+        } catch (error) {
+            console.log('Failed to inject content script:', error);
+        }
     }
 });
 
