@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Outlook to Notion Task Generator",
+  "version": "1.0",
+  "description": "自动从Outlook邮件生成任务并添加到Notion",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://outlook.live.com/*",
+    "https://outlook.office.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.notion.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://outlook.live.com/*",
+        "https://outlook.office.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Outlook to Notion"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
