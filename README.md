@@ -297,4 +297,15 @@ A: 这通常是内容脚本加载问题：
 
 ### 📄 许可证
 
-此项目仅供学习和个人使用。使用前请确保遵守Google Gemini API和Notion API的使用条款。
+本项目采用 [MIT License](LICENSE) 开源协议。
+
+**使用须知**：
+- ✅ 可以自由使用、修改、分发
+- ✅ 可以用于商业用途
+- ✅ 需要保留版权声明
+- ⚠️ 使用前请确保遵守以下第三方服务条款：
+  - [Google Gemini API Terms](https://ai.google.dev/terms)
+  - [Notion API Terms](https://developers.notion.com/page/terms-of-use)
+  - Microsoft Outlook服务条款
+
+**隐私说明**：此扩展会将邮件内容发送给Google Gemini API进行分析，请在使用前了解相关隐私政策。
